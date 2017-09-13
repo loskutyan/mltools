@@ -278,3 +278,233 @@ class Tokenizer:
     "просто",
 ]
 '''
+
+class TopFreqClassTokensFeaturesCalculator:
+    """Class for tokens vectorizer, based on tokens frequencies in classes
+    
+    Token must be a string without any separating symbols
+    
+    Vectorizer contains top frequency tokens for each class
+    Based on mltools.TextVectorizer
+    
+    Parameters
+    ----------
+    logger_name : str, optional (default=None)
+    
+    """
+    
+    def __init__(self, logger_name=None):
+        self.vectorizer = None
+        self._logger_name = logger_name
+
+    def _get_counters(self, tokens_lists, target, classes_sizes):
+        """Private function to build tokens-in-class counters
+        
+        Parameters
+        ----------
+            tokens_lists : pandas.Series of lists of tokens
+            target : pandas.Series of labels
+            classes_sizes : dict of int
+                Dict with classes labels as keys and classes sizes as values.
+            appear : bool
+                Whether counting each token only once for each text (appear=True)
+                or exact token appearance number in text (appear=False).
+        Returns
+        -------
+            counters : dict of collections.Counter()
+                Dict with classes labels as keys
+                and collections.Counter() object for tokens as values.
+        """
+        
+        counters = {cl : Counter() for cl in classes_sizes.keys()}
+        for cl, counter in counters.items():
+            for tokens_list in tokens_lists[target == cl]:
+                counter.update(Counter(set(tokens_list) if appear else tokens_list))
+        return counters
+
+    def _get_tokens_dict(self, counters, cl_tokens_number, all_tokens_number, min_cl_token_freq, classes_sizes):
+        """Private function to build tokens dict for vectorizer
+        
+        Method unites `cl_tokens_number` of top frequency tokens from each class
+        with respect to `min_cl_token_freq`.
+        After this process finished if result dict size is less than `all_tokens_number`
+        all tokens from classes collected together and sorted by token max frequency in any class.
+        Then method tries to complete result list with top frequency tokens from this sorted list
+        again with respect to `min_cl_token_freq`.
+        
+        Parameters
+        ----------
+            counters : dict of collections.Counter()
+                Dict with classes labels as keys
+                and collections.Counter() object for tokens as values.
+            cl_tokens_number : int
+                Max number of tokens in result dict for each class.
+            all_tokens_number : int
+                Objective number of tokens in result dict.
+            min_cl_token_freq : int
+                Min token frequency threshold in class to add to result dict.
+            classes_sizes : dict of int
+                Dict with classes labels as keys and classes sizes as values.
+        Returns
+        -------
+            result_dict : list of tokens
+        """
+        
+        result_dict = set()
+        for cl, counter in counters.items():
+            for token, freq in counter.most_common(cl_tokens_number):
+                if freq >= min_cl_token_freq:
+                    result_dict.add(token)
+
+        if len(result_dict) < all_tokens_number:
+            to_add = all_tokens_number - len(result_dict)
+            if self._logger_name is not None:
+                logging.getLogger(self._logger_name).info('building tokens dict: needed {} more'.format(to_add))
+            top_freq_tokens = Counter()
+            for cl, counter in counters.items():
+                for token, freq in counter.items():
+                    if freq / classes_sizes[cl] > top_freq_tokens[token] and freq >= min_cl_token_freq:
+                        top_freq_tokens[token] = freq / classes_sizes[cl]
+            
+            for token, freq in top_freq_tokens.most_common(all_tokens_number):
+                if token not in result_dict and to_add > 0:
+                    result_dict.add(token)
+                    to_add -= 1
+        else:
+            if self._logger_name is not None:
+                logging.getLogger(self._logger_name).info('building tokens dict: no more needed')
+        
+        result_dict = sorted(result_dict)
+        return result_dict
+
+    def _build_vectorizer(self, tokens_lists, target, cl_tokens_number, all_tokens_number, min_cl_token_freq,
+                          classes_sizes, appear, count, lowercase):
+        """Private function to build and fit TextVectorizer
+        
+        Parameters
+        ----------
+            tokens_lists : pandas.Series of lists of tokens
+            target : pandas.Series of labels
+            classes_sizes : dict of int
+                Dict with classes labels as keys and classes sizes as values.
+            cl_tokens_number : int
+                Max number of tokens in result dict for each class.
+            all_tokens_number : int
+                Objective number of tokens in result dict.
+            min_cl_token_freq : int
+                Min token frequency threshold in class to add to result dict.
+            classes_sizes : dict of int
+                Dict with classes labels as keys and classes sizes as values.
+            appear : bool
+                Whether counting each token only once for each text (appear=True)
+                or exact token appearance number in text (appear=False).
+            count : bool
+                TextVectorizer parameter whether it should count tokens in texts
+                or just binary `token is/is not in text`
+            lowercase: bool
+                TextVectorizer parameter whether to convert all characters to lowercase
+                before tokenizing or not (
+                (False if text is always already lowercase or case is important)
+                
+        Returns
+        -------
+            counters : `TextVectorizer` object
+                Dict with classes labels as keys
+                and collections.Counter() object for tokens as values.
+        """
+        if len(tokens_lists) != len(target):
+            raise ValueError('target and data length should be the same')
+        if np.sum(tokens_lists.index != target.index) > 0:
+            raise ValueError('target and data index should be the same')
+
+        counters = self._get_counters(tokens_lists, target, classes_sizes, appear=appear)
+        tokens_dict = self._get_tokens_dict(counters, cl_tokens_number, all_tokens_number, classes_sizes,
+                                            min_cl_token_freq)
+        vectorizer = TextVectorizer(1, 1, tokens_dict, count, lowercase, )
+        return vectorizer
+
+    def fit(self, tokens_lists, target, cl_tokens_number, all_tokens_number, min_cl_token_freq,
+            appear=True, count=True, lowercase=False):
+        """Function that collect tokens dict and fits vectorizer
+        
+        Parameters
+        ----------
+            tokens_lists : pandas.Series of lists of tokens
+            target : pandas.Series of labels
+            classes_sizes : dict of int
+                Dict with classes labels as keys and classes sizes as values.
+            cl_tokens_number : int
+                Max number of tokens in result dict for each class.
+            all_tokens_number : int
+                Objective number of tokens in result dict.
+            min_cl_token_freq : int
+                Min token frequency threshold in class to add to result dict.
+            appear : bool, optional (default=True)
+                Whether counting each token only once for each text (appear=True)
+                or exact token appearance number in text (appear=False).
+            count : bool, optional (default=True)
+                TextVectorizer parameter whether it should count tokens in texts
+                or just binary `token is/is not in text`
+            lowercase: bool, optional (default=False)
+                TextVectorizer parameter whether to convert all characters to lowercase
+                before tokenizing or not
+                (False if text is always already lowercase or case is important)
+        """
+        classes = set(target)
+        classes_sizes = {cl : np.sum(target == cl) for cl in classes}
+        #other_classes = {cl : target[target != cl].unique() for cl in classes_sizes.keys()}
+        
+        self.vectorizer = self._build_vectorizer(tokens_lists, target, classes_sizes, cl_tokens_number,
+                                                 all_tokens_number, min_cl_token_freq, appear, count, lowercase)
+        self.vectorizer.fit(tokens_lists.map(lambda x: ' '.join(x)))
+
+    def transform(self, text_col):
+        """Function that transform texts to features
+        
+        Parameters
+        ----------
+            text_col : pandas.Series of str
+            Texts consisting of tokens.
+            Each token must not contain word separators
+        Returns
+        -------
+            pandas.DataFrame
+            Feature values
+        """
+        return self.vectorizer.transform(text_col)
+    
+    def fit_transform(self, tokens_lists, target, cl_tokens_number, all_tokens_number, min_cl_token_freq,
+                      appear=True, count=True, lowercase=False):
+        """Function that collect tokens dict and fits vectorizer
+        
+        Parameters
+        ----------
+            tokens_lists : pandas.Series of lists of tokens
+            target : pandas.Series of labels
+            classes_sizes : dict of int
+                Dict with classes labels as keys and classes sizes as values.
+            cl_tokens_number : int
+                Max number of tokens in result dict for each class.
+            all_tokens_number : int
+                Objective number of tokens in result dict.
+            min_cl_token_freq : int
+                Min token frequency threshold in class to add to result dict.
+            appear : bool, optional (default=True)
+                Whether counting each token only once for each text (appear=True)
+                or exact token appearance number in text (appear=False).
+            count : bool, optional (default=True)
+                TextVectorizer parameter whether it should count tokens in texts
+                or just binary `token is/is not in text`
+            lowercase: bool, optional (default=False)
+                TextVectorizer parameter whether to convert all characters to lowercase
+                before tokenizing or not
+                (False if text is always already lowercase or case is important)
+        Returns
+        -------
+            pandas.DataFrame
+            Feature values
+        """
+        self.fit(tokens_lists, target, cl_tokens_number, all_tokens_number, min_cl_token_freq, appear,
+                 count, lowercase)
+        return self.transform(tokens_lists.map(lambda x: ' '.join(x)))
+
