@@ -297,7 +297,7 @@ class TopFreqClassTokensFeaturesCalculator:
         self.vectorizer = None
         self._logger_name = logger_name
 
-    def _get_counters(self, tokens_lists, target, classes_sizes):
+    def _get_counters(self, tokens_lists, target, classes_sizes, appear):
         """Private function to build tokens-in-class counters
         
         Parameters
@@ -417,9 +417,9 @@ class TopFreqClassTokensFeaturesCalculator:
         if np.sum(tokens_lists.index != target.index) > 0:
             raise ValueError('target and data index should be the same')
 
-        counters = self._get_counters(tokens_lists, target, classes_sizes, appear=appear)
-        tokens_dict = self._get_tokens_dict(counters, cl_tokens_number, all_tokens_number, classes_sizes,
-                                            min_cl_token_freq)
+        counters = self._get_counters(tokens_lists, target, classes_sizes, appear)
+        tokens_dict = self._get_tokens_dict(counters, cl_tokens_number, all_tokens_number, min_cl_token_freq,
+                                            classes_sizes)
         vectorizer = TextVectorizer(1, 1, tokens_dict, count, lowercase, )
         return vectorizer
 
@@ -454,8 +454,8 @@ class TopFreqClassTokensFeaturesCalculator:
         classes_sizes = {cl : np.sum(target == cl) for cl in classes}
         #other_classes = {cl : target[target != cl].unique() for cl in classes_sizes.keys()}
         
-        self.vectorizer = self._build_vectorizer(tokens_lists, target, classes_sizes, cl_tokens_number,
-                                                 all_tokens_number, min_cl_token_freq, appear, count, lowercase)
+        self.vectorizer = self._build_vectorizer(tokens_lists, target, cl_tokens_number, all_tokens_number,
+                                                 min_cl_token_freq, classes_sizes, appear, count, lowercase)
         self.vectorizer.fit(tokens_lists.map(lambda x: ' '.join(x)))
 
     def transform(self, text_col):
@@ -507,4 +507,3 @@ class TopFreqClassTokensFeaturesCalculator:
         self.fit(tokens_lists, target, cl_tokens_number, all_tokens_number, min_cl_token_freq, appear,
                  count, lowercase)
         return self.transform(tokens_lists.map(lambda x: ' '.join(x)))
-
