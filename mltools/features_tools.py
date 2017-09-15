@@ -160,7 +160,7 @@ class TextVectorizer:
 
 class Tokenizer:
     def __init__(self):
-        self.sentence_divider = re.compile("^[\.+|\!+|\?+|\)+|\(+|\,+|\:+\;+]\s*")
+        self.sentence_divider = re.compile(r'^[\.+|\!+|\?+|\)+|\(+|\,+|\:+\;+]\s*')
         self.eng_pattern = re.compile('^[a-zA-Z]+$')
         self.ILLEGAL_CHARACTERS_RE = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
         self.sentence_separators = '.!?'
