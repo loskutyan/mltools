@@ -1,8 +1,23 @@
+import re
 import math
 import nltk
 import random
 from scipy.optimize import minimize_scalar
 from collections import Counter
+
+class MultiRegexReplacer:
+    def __init__(self, regexp_dict, prefix='', suffix=''):
+        self._regexp_dict = regexp_dict
+        self.regex = re.compile('|'.join(['{}{}{}'.format(prefix, k, suffix)
+                                          for k in map(re.escape, self._regexp_dict.keys())]))
+
+    def __call__(self, match):
+        return self._regexp_dict.get(match.string[match.start():match.end()])
+
+    def sub(self, s):
+        if len(self._regexp_dict) == 0:
+            return s
+        return self.regex.sub(self, s)
 
 class NGramStorage:
     """Storage for ngrams' frequencies.
