@@ -149,7 +149,7 @@ class TextVectorizer:
     def transform(self, text_col):
         transformed = self.vectorizer.transform(text_col.fillna('')).toarray()
         prefix = ('count_' if self.count else '') + text_col.name + ':_'
-        features = pd.DataFrame(transformed.astype('bool') if not self.count else transformed,
+        features = pd.DataFrame(transformed.astype('bool') if not self.count else transformed.astype('int8'),
                                 columns=[prefix + x for x in self.vectorizer.get_feature_names()],
                                 index=text_col.index)
         return features
@@ -160,17 +160,15 @@ class TextVectorizer:
 
 class Tokenizer:
     def __init__(self):
+        self.multispace_end_pattern = re.compile(r'\s+$')
         self.sentence_divider = re.compile(r'^[\.+|\!+|\?+|\)+|\(+|\,+|\:+\;+]\s*')
         self.eng_pattern = re.compile('^[a-zA-Z]+$')
         self.ILLEGAL_CHARACTERS_RE = re.compile(r'[\000-\010]|[\013-\014]|[\016-\037]')
         self.sentence_separators = '.!?'
-        self.model_file_name = '2015.model'
         self.intab = "012345678"
         self.outtab = "999999999"
         self.digit_trans = str.maketrans(self.intab, self.outtab)
         self.mystem = Mystem()
-        self.none_accum = Counter()
-        self.bastard_accum = Counter()
         self.whitelist = {}
         self.stopwords = []
         self.token_filter = lambda x: x[3] is not None
@@ -178,14 +176,14 @@ class Tokenizer:
 
     def get_token(self, item):
         if 'analysis' in item.keys() and len(item['analysis']) > 0:
-            return (item['analysis'][0]['lex'],
-                    item['text'],
+            return (self.multispace_end_pattern.sub('', item['analysis'][0]['lex']),
+                    self.multispace_end_pattern.sub('', item['text']),
                     (lambda x: 'qual' in x.keys() and x['qual'] or None)(item['analysis'][0]),
                     item['analysis'][0]['gr']
                     )
         else:
-            return (item['text'].lower().translate(self.digit_trans),
-                    item['text'],
+            return (self.multispace_end_pattern.sub('', item['text'].lower().translate(self.digit_trans)),
+                    self.multispace_end_pattern.sub('', item['text']),
                     None,
                     None
                     )
@@ -193,7 +191,7 @@ class Tokenizer:
     def tokenize(self, text):
         analyze = self.mystem.analyze(text)
         stack = []
-        # Убираем последний item, потому, что mystem вставляет '/n' после всего текста
+        # Убираем последний item, потому, что mystem вставляет '\n' после всего текста
         for item in analyze[:-1]:
             token = self.get_token(item)
             if token[3] and "сокр" in token[3]:
@@ -216,49 +214,48 @@ class Tokenizer:
             return []
         sentences = []
         sentence = []
+        
+        def add_to_sentence(token, sentence):
+            sentence += [(token[0], self.ILLEGAL_CHARACTERS_RE.sub("", token[1]).strip().lower(),
+                          False, token[3].split('=')[0].split(',')[0] if token[3] is not None else None)]
+            if self.concat_no_s and len(sentence[-2:-1]) > 0 and "не" in sentence[-2:-1][0]:
+                sentence[-2:] = [reduce(lambda x, y: (x[0] + y[0], x[1] + y[1], True, y[3]), sentence[-2:])]
+                
+        def flush_english_to_sentence(english_collector, sentence, leave_hyphen_in_place=False):
+            word = ''.join(english_collector)
+            if not leave_hyphen_in_place:
+                word = word.replace('-', '')
+            english_collector[:] = []
+            if len(word) > 1:
+                sentence += [(word, word, False, 'ENG')]
+        
         english_collector = []
         for token in self.tokenize(text):
-            if self.sentence_divider.findall(token[0]):
-                if english_collector:
-                    word = ''.join(english_collector).replace('-', '')
-                    english_collector = []
-                    if len(word) > 1:
-                        sentence += [(word, word, False, 'ENG')]
-                if len(sentence) > 0:
-                    sentences.append(sentence)
-                sentence = []
-            if token[3] is None:
-                self.none_accum[token[0]] += 1
-            if token[2] == 'bastard':
-                self.bastard_accum[token[0]] += 1
-                
             if english_collector:
                 if token[0] == '-':
                     english_collector.append(token[0])
                     continue
-                elif english_collector[-1] == '-' and self.eng_pattern.findall(token[0]):
+                elif english_collector[-1] == '-' and self.eng_pattern.match(token[0]) is not None:
                     english_collector.append(token[0])
-                    word = ''.join(english_collector)
-                    english_collector = []
-                    if len(word) > 1:
-                        sentence += [(word, word, False, 'ENG')]
+                    flush_english_to_sentence(english_collector, sentence, True)
                     continue
                 else:
-                    word = ''.join(english_collector).replace('-', '')
-                    english_collector = []
-                    if len(word) > 1:
-                        sentence += [(word, word, False, 'ENG')]
-            else:
-                if self.eng_pattern.findall(token[0]):
-                    english_collector.append(token[0])
-                    continue
+                    flush_english_to_sentence(english_collector, sentence)
+            if self.eng_pattern.findall(token[0]):
+                english_collector.append(token[0])
+                continue
+            
+            if token[0] in self.whitelist or (token[0] not in self.stopwords and self.token_filter(token)):
+                add_to_sentence(token, sentence)
+                continue
+            
+            if self.sentence_divider.match(token[0]):
+                if len(sentence) > 0:
+                    sentences.append(sentence)
+                sentence = []
 
-            if (self.token_filter(token) or token[0] in self.whitelist) and token[0] not in self.stopwords:
-                sentence += [(token[0], self.ILLEGAL_CHARACTERS_RE.sub("", token[1]).strip().lower(),
-                              False, token[3].split('=')[0].split(',')[0] if token[3] is not None else None)]
-                if self.concat_no_s and len(sentence[-2:-1]) > 0 and "не" in sentence[-2:-1][0]:
-                    sentence[-2:] = [reduce(lambda x, y: (x[0] + y[0], x[1] + y[1], True, y[3]), sentence[-2:])]
-
+        if english_collector:
+            flush_english_to_sentence(english_collector, sentence)
         if len(sentence) > 0:
             sentences.append(sentence)
 
