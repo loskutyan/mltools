@@ -114,7 +114,7 @@ class XGBoostParamsOptimizer:
         self._folds = folds
 
         trials = Trials()
-        self._optimize_trees(trials, max_evals, max_depth_min, max_depth_max, min_eta, max_eta, eta_setp, 
+        self._optimize_trees(trials, max_evals, max_depth_min, max_depth_max, min_eta, max_eta, eta_step, 
                              objective, score_metric, extra_metrics, zero_min_child_weight, zero_gamma, max_numround,
                              scale_pos_weight, num_class)
         
