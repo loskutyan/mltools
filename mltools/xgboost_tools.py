@@ -50,14 +50,15 @@ class XGBoostParamsOptimizer:
                                                          end_time - start_time))
         return {'loss' : score, 'status': STATUS_OK}
     
-    def _optimize_trees(self, trials, max_evals, max_depth_min, max_depth_max, objective, score_metric, extra_metrics,
-                        zero_min_child_weight, zero_gamma, max_numround, scale_pos_weight, num_class):
+    def _optimize_trees(self, trials, max_evals, max_depth_min, max_depth_max, min_eta, max_eta, eta_step,
+                        objective, score_metric, extra_metrics, zero_min_child_weight, zero_gamma, max_numround,
+                        scale_pos_weight, num_class):
         
         gamma = 0.0 if zero_gamma else hp.qloguniform('gamma', np.log(1e-5), np.log(1e1), 1)
         min_child_weight = 0.0 if zero_min_child_weight else hp.qloguniform('min_child_weight',
                                                                             np.log(1e-5), np.log(1e1), 1)
         space = {
-            'eta' : hp.quniform('eta', 0.02, 0.2, 0.02),
+            'eta' : hp.quniform('eta', min_eta, max_eta, eta_step),
             'max_depth' : hp.quniform('max_depth', max_depth_min, max_depth_max, 1),
             'min_child_weight' : min_child_weight,
             'subsample' : hp.quniform('subsample', 0.5, 1, 0.05),
@@ -78,7 +79,8 @@ class XGBoostParamsOptimizer:
         print(best)
         
     def get_optimal_xgb_params(self, features, target, folds, binary=True, score_metric=None, extra_metrics=None,
-                               max_depth_min=2, max_depth_max=6, max_evals=50, zero_min_child_weight=True,
+                               max_depth_min=2, max_depth_max=6, min_eta=0.02, max_eta=0.2, eta_step=0.02,
+                               max_evals=50, zero_min_child_weight=True, use_hists=False,
                                zero_gamma=True, weigh_positives=False, max_numround=1000, task_name='xgb_params',
                                tmp_dir=None, remove_tmp_dir=False):
         if score_metric is not None:
@@ -112,8 +114,9 @@ class XGBoostParamsOptimizer:
         self._folds = folds
 
         trials = Trials()
-        self._optimize_trees(trials, max_evals, max_depth_min, max_depth_max, objective, score_metric, extra_metrics,
-                             zero_min_child_weight, zero_gamma, max_numround, scale_pos_weight, num_class)
+        self._optimize_trees(trials, max_evals, max_depth_min, max_depth_max, min_eta, max_eta, eta_setp, 
+                             objective, score_metric, extra_metrics, zero_min_child_weight, zero_gamma, max_numround,
+                             scale_pos_weight, num_class)
         
         if remove_tmp_dir:
             shutil.rmtree(self._tmp_dir)
