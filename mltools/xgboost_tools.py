@@ -51,8 +51,8 @@ class XGBoostParamsOptimizer:
         return {'loss' : score, 'status': STATUS_OK}
     
     def _optimize_trees(self, trials, max_evals, max_depth_min, max_depth_max, min_eta, max_eta, eta_step,
-                        objective, score_metric, extra_metrics, zero_min_child_weight, zero_gamma, max_numround,
-                        scale_pos_weight, num_class):
+                        objective, score_metric, extra_metrics, zero_min_child_weight, zero_gamma,
+                        use_hists, grow_policy, max_numround, scale_pos_weight, num_class):
         
         gamma = 0.0 if zero_gamma else hp.qloguniform('gamma', np.log(1e-5), np.log(1e1), 1)
         min_child_weight = 0.0 if zero_min_child_weight else hp.qloguniform('min_child_weight',
@@ -68,21 +68,24 @@ class XGBoostParamsOptimizer:
             'silent' : 1,
             'score_metric' : score_metric,
             'extra_metrics' : extra_metrics,
-            'numround' : max_numround
+            'numround' : max_numround,
         }
         if objective.startswith('binary'):
             space['scale_pos_weight'] = scale_pos_weight
         if objective.startswith('multi'):
             space['num_class'] = num_class
+        if use_hists:
+            space['tree_method'] = 'hist'
+            space['grow_policy'] = grow_policy
 
         best = fmin(self._xgb_binary_score, space, algo=tpe.suggest, trials=trials, max_evals=max_evals)
         print(best)
         
     def get_optimal_xgb_params(self, features, target, folds, binary=True, score_metric=None, extra_metrics=None,
                                max_depth_min=2, max_depth_max=6, min_eta=0.02, max_eta=0.2, eta_step=0.02,
-                               max_evals=50, zero_min_child_weight=True, use_hists=False,
-                               zero_gamma=True, weigh_positives=False, max_numround=1000, task_name='xgb_params',
-                               tmp_dir=None, remove_tmp_dir=False):
+                               max_evals=50, zero_min_child_weight=True, zero_gamma=True, use_hists=False,
+                               grow_policy='depthwise', weigh_positives=False, max_numround=1000,
+                               task_name='xgb_params', tmp_dir=None, remove_tmp_dir=False):
         if score_metric is not None:
             if binary and score_metric not in ['logloss', 'error', 'rmse', 'auc']:
                 raise ValueError('use correct metrics for binary tasks')
@@ -115,8 +118,8 @@ class XGBoostParamsOptimizer:
 
         trials = Trials()
         self._optimize_trees(trials, max_evals, max_depth_min, max_depth_max, min_eta, max_eta, eta_step, 
-                             objective, score_metric, extra_metrics, zero_min_child_weight, zero_gamma, max_numround,
-                             scale_pos_weight, num_class)
+                             objective, score_metric, extra_metrics, zero_min_child_weight, zero_gamma,
+                             use_hists, grow_policy, max_numround, scale_pos_weight, num_class)
         
         if remove_tmp_dir:
             shutil.rmtree(self._tmp_dir)
