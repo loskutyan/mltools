@@ -4,8 +4,7 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 from functools import reduce
-from sklearn.preprocessing import OneHotEncoder
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
 from sklearn.feature_extraction.text import CountVectorizer
 
 from pymystem3 import Mystem
@@ -26,9 +25,10 @@ class DataFrameScaler:
         if not isinstance(X, pd.DataFrame):
             raise ValueError('argument must be pandas DataFrame')
         if self._scale_ints:
-            self._cols_idx_to_scale = np.where(np.logical_or(X.dtypes == float, X.dtypes == int))[0]
+            self._cols_idx_to_scale = np.where(np.logical_or(X.dtypes.map(lambda x: str(x).startswith('int')),
+                                                             X.dtypes.map(lambda x: str(x).startswith('float'))))[0]
         else:
-            self._cols_idx_to_scale = np.where(X.dtypes == float)[0]
+            self._cols_idx_to_scale = np.where(X.dtypes.map(lambda x: str(x).startswith('float')))[0]
         self._cols_to_scale = X.columns[self._cols_idx_to_scale]
         self._scalers = {col : StandardScaler() for col in self._cols_to_scale}
         for col, scaler in self._scalers.items():
