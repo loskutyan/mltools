@@ -173,6 +173,8 @@ class Tokenizer:
         self.stopwords = []
         self.token_filter = lambda x: x[3] is not None
         self.concat_no_s = True
+        self.drop_fio_and_geo = True
+        self.fio_and_geo_parts = ['имя', 'фам', ' отч', 'гео']
 
     def get_token(self, item):
         if 'analysis' in item.keys() and len(item['analysis']) > 0:
@@ -243,6 +245,9 @@ class Tokenizer:
                     flush_english_to_sentence(english_collector, sentence)
             if self.eng_pattern.findall(token[0]):
                 english_collector.append(token[0])
+                continue
+
+            if self.drop_fio_and_geo and token[3] is not None and any([x in token[3] for x in self.fio_and_geo_parts]):
                 continue
             
             if token[0] in self.whitelist or (token[0] not in self.stopwords and self.token_filter(token)):
