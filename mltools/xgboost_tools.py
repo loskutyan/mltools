@@ -55,11 +55,11 @@ class XGBoostParamsOptimizer:
                         objectives, score_metric, extra_metrics, zero_min_child_weight, zero_gamma,
                         max_numround, scale_pos_weight, num_class):
         
-        gamma = 0.0 if zero_gamma else hp.qloguniform('gamma', np.log(1e-5), np.log(1e1), 1)
+        gamma = 0.0 if zero_gamma else hp.loguniform('gamma', np.log(1e-5), np.log(1e1))
         min_child_weight = 0.0 if zero_min_child_weight else hp.qloguniform('min_child_weight',
-                                                                            np.log(1e-5), np.log(1e1), 1)
-        lamb = 1.0 if default_lambda else hp.qloguniform('lambda', np.log(min_lambda), np.log(max_lambda), 1)
-        alpha = 0.0 if zero_alpha else hp.qloguniform('alpha', np.log(min_alpha), np.log(max_alpha), 1)
+                                                                            np.log(1e-5), np.log(1e1))
+        lamb = 1.0 if default_lambda else hp.loguniform('lambda', np.log(min_lambda), np.log(max_lambda))
+        alpha = 0.0 if zero_alpha else hp.loguniform('alpha', np.log(min_alpha), np.log(max_alpha))
         space = {
             'eta' : hp.quniform('eta', min_eta, max_eta, eta_step),
             'max_depth' : hp.quniform('max_depth', max_depth_min, max_depth_max, 1),
