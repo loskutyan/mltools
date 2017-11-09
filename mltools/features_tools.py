@@ -174,7 +174,7 @@ class Tokenizer:
         self.token_filter = lambda x: x[3] is not None
         self.concat_no_s = True
         self.drop_fio_and_geo = True
-        self.fio_and_geo_parts = ['имя', 'фам', ' отч', 'гео']
+        self.fio_and_geo_parts = ['имя', 'фам', 'отч', 'гео']
 
     def get_token(self, item):
         if 'analysis' in item.keys() and len(item['analysis']) > 0:
