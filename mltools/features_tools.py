@@ -816,4 +816,3 @@ class ClassUniqueTokensFeaturesCalculator:
                  strongly_unique_cl_tokens_number, strongly_unique_all_tokens_number,
                  min_cl_token_freq, appear, count, lowercase)
         return self.transform(tokens_lists.map(lambda x: ' '.join(x)))
-
