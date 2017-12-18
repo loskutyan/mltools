@@ -250,11 +250,11 @@ class Tokenizer:
                 english_collector.append(token[0])
                 continue
 
-            fio_and_geo_replacements = {x : self.fio_and_geo_parts[x] for x in token[3]
-                                        if x in self.fio_and_geo_parts}
-                
-            if self.replace_fio_and_geo and token[3] is not None and len(fio_and_geo_replacements) > 0:
-                token[0] = list(fio_and_geo_replacements.values())[0]
+            if self.replace_fio_and_geo and token[3] is not None:
+                fio_and_geo_replacements = {x : self.fio_and_geo_parts[x] for x in token[3]
+                                            if x in self.fio_and_geo_parts}
+                if len(fio_and_geo_replacements) > 0:
+                    token[0] = list(fio_and_geo_replacements.values())[0]
             
             if token[0] in self.whitelist or (token[0] not in self.stopwords and self.token_filter(token)):
                 add_to_sentence(token, sentence)
