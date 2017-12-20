@@ -251,8 +251,8 @@ class Tokenizer:
                 continue
 
             if self.replace_fio_and_geo and token[3] is not None:
-                fio_and_geo_replacements = {x : self.fio_and_geo_parts[x] for x in token[3]
-                                            if x in self.fio_and_geo_parts}
+                fio_and_geo_replacements = {k : v for k, v in self.fio_and_geo_parts.items()
+                                            if k in token[3]}
                 if len(fio_and_geo_replacements) > 0:
                     token[0] = list(fio_and_geo_replacements.values())[0]
             
