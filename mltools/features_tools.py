@@ -254,7 +254,7 @@ class Tokenizer:
                 fio_and_geo_replacements = {k : v for k, v in self.fio_and_geo_parts.items()
                                             if k in token[3]}
                 if len(fio_and_geo_replacements) > 0:
-                    token[0] = list(fio_and_geo_replacements.values())[0]
+                    token = (list(fio_and_geo_replacements.values())[0], token[1], token[2], token[3])
             
             if token[0] in self.whitelist or (token[0] not in self.stopwords and self.token_filter(token)):
                 add_to_sentence(token, sentence)
