@@ -197,7 +197,7 @@ def _laplace_perplexity(storage, test_sents, delta):
     return perp
 
 
-def get_best_laplace_estimator_delta(sentences, n_for_ngram_storage=3, min_delta=0., max_delta=1000., seed=42):
+def get_best_laplace_estimator_delta(sentences, n_for_ngram_storage=3, min_delta=0., max_delta=1000., seed=42, tol=1e-3):
     random.seed(seed)
     random.shuffle(sentences)
     print('Number of all sentences = {}'.format(len(sentences)))
@@ -206,8 +206,8 @@ def get_best_laplace_estimator_delta(sentences, n_for_ngram_storage=3, min_delta
     print('Number of train sentences = {}'.format(len(train_sents)))
     print('Number of test sentences = {}'.format(len(test_sents)))
     storage = NGramStorage(train_sents, n_for_ngram_storage)
-    bounds = (0., 1000.)
+    bounds = (min_delta, max_delta)
     best_delta = minimize_scalar(lambda x: _laplace_perplexity(storage, test_sents, x), method = 'bounded', bounds = bounds,
-                                 options={'xatol': 1e-3, 'disp': True}).x
+                                 options={'xatol': tol, 'disp': True}).x
     
     return best_delta
