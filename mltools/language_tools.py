@@ -2,6 +2,7 @@ import re
 import math
 import nltk
 import random
+import numpy as np
 from scipy.optimize import minimize_scalar
 from collections import Counter
 
@@ -40,15 +41,12 @@ class NGramStorage:
         # self._ngrams[K][(w_1, ..., w_K)] = number of times w_1, ..., w_K occured in words
         # self._ngrams[0][()] = number of all words
         
-        ### YOUR CODE HERE
         self.__ngrams[0][()] = sum(len(sents[i]) for i in range(len(sents)))
     
         for n in range(1, self.__max_n + 1):
             for sentence in sents:
                 for ngram in nltk.ngrams(sentence, n):
                     self.__ngrams[n][ngram] += 1
-
-        ### END YOUR CODE
         
     def add_unk_token(self):
         """Add UNK token to 1-grams."""
@@ -60,7 +58,6 @@ class NGramStorage:
         
     @property
     def max_n(self):
-        """Get max_n"""
         return self.__max_n
         
     def __getitem__(self, k):
@@ -99,7 +96,6 @@ class NGramStorage:
 
 def perplexity(estimator, sents):
     '''Estimate perplexity of the sequence of words using prob_estimator.'''
-    ### YOUR CODE HERE
     # Avoid log(0) by replacing zero by 10 ** (-50).
     sum_log_pr = 0
     sum_len = sum(len(sents[i]) for i in range(len(sents)))
@@ -111,7 +107,6 @@ def perplexity(estimator, sents):
         sum_log_pr += math.log(pr)
     sum_log_pr *= (-1. / sum_len)
     perp = math.exp(sum_log_pr)
-    ### END YOUR CODE
     
     return perp
 
@@ -162,13 +157,11 @@ class LaplaceProbabilityEstimator:
         if not isinstance(context, tuple):
             raise TypeError('context must be a tuple!')
             
-        ### YOUR CODE HERE
         # If context is too large, let's cut it.
         context = self.cut_context(context)
         phrase_counts = self.__storage(context + (word, ))
         context_counts = self.__storage(context)
         prob = (1. * phrase_counts + self.__delta) / (context_counts + self.__delta * len(self.__storage[1]))
-        ### END YOUR CODE
         
         return prob
     
@@ -187,10 +180,6 @@ class LaplaceProbabilityEstimator:
         return prob
     
 # Try to find out best delta parametr. We will not provide you any strater code.
-### YOUR CODE HERE
-import numpy as np
-
-
 def _laplace_perplexity(storage, test_sents, delta):
     laplace_estimator = LaplaceProbabilityEstimator(storage, delta)
     perp = perplexity(laplace_estimator, test_sents)
