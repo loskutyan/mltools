@@ -1,13 +1,14 @@
 import re
 import logging
-import numpy as np
-import pandas as pd
 from collections import Counter
 from functools import reduce
+
+import numpy as np
+import pandas as pd
 from sklearn.preprocessing import OneHotEncoder, LabelEncoder, StandardScaler
 from sklearn.feature_extraction.text import CountVectorizer
-
 from pymystem3 import Mystem
+
 
 class DataFrameScaler:
     def __init__(self, scale_ints=True, smart_log=True, log_scale_threshold=1e+3):
@@ -17,10 +18,10 @@ class DataFrameScaler:
         self._log_cols = set()
         self._biased_cols = {}
         self._log_scale_threshold = log_scale_threshold
-            
+
         self._cols_idx_to_scale = None
         self._cols_to_scale = None
-        
+
     def fit(self, X):
         if not isinstance(X, pd.DataFrame):
             raise ValueError('argument must be pandas DataFrame')
@@ -30,7 +31,7 @@ class DataFrameScaler:
         else:
             self._cols_idx_to_scale = np.where(X.dtypes.map(lambda x: str(x).startswith('float')))[0]
         self._cols_to_scale = X.columns[self._cols_idx_to_scale]
-        self._scalers = {col : StandardScaler() for col in self._cols_to_scale}
+        self._scalers = {col: StandardScaler() for col in self._cols_to_scale}
         for col, scaler in self._scalers.items():
             data_to_scale = X[col].dropna()
             scaler.fit(data_to_scale.values.reshape(-1, 1))
@@ -41,8 +42,7 @@ class DataFrameScaler:
                 else:
                     scaler.fit(np.log(data_to_scale.values.reshape(-1, 1)))
                 self._log_cols.add(col)
-                
-        
+
     def transform(self, X):
         result = X.copy()
         for col, scaler in self._scalers.items():
@@ -57,26 +57,32 @@ class DataFrameScaler:
                     data_to_scale = np.log(X[col])
             else:
                 data_to_scale = X[col]
-            scaled = pd.Series(scaler.transform(data_to_scale.iloc[valid_indexes].values.reshape(-1, 1)).reshape(1, -1)[0],
-                               index=valid_indexes)
+            scaled = pd.Series(
+                scaler.transform(data_to_scale.iloc[valid_indexes].values.reshape(-1, 1)).reshape(1, -1)[0],
+                index=valid_indexes
+            )
             result[col] = np.array([np.nan if i in nan_indexes else scaled.loc[i] for i in range(len(X))])
         result.columns = ['log_' + x if x in self._log_cols else x for x in X.columns]
         return result
-    
+
     def fit_transform(self, X):
         self.fit(X)
         return self.transform(X)
-    
+
     def inverse_transform(self, X):
         cols_to_inverse_scale = [x for x in X.columns if x in self._cols_to_scale]
         cols_to_inverse_scale_idx = [np.where(np.array(self._cols_to_scale) == x)[0][0] for x in cols_to_inverse_scale]
         result = X.copy()
         for i, col in enumerate(cols_to_inverse_scale):
-            result[col] = X[col] * self._scaler.scale_[cols_to_inverse_scale_idx[i]] + self._scaler.mean_[cols_to_inverse_scale_idx[i]]
+            result[col] = X[col] * self._scaler.scale_[cols_to_inverse_scale_idx[i]] \
+                          + self._scaler.mean_[cols_to_inverse_scale_idx[i]]
         return result
-        
+
+
 class MyOneHotEncoder:
-    def __init__(self, min_freq=0, drop_classes=[], na_allowed=True, extra_classes_allowed=True, logger_name=None):
+    def __init__(self, min_freq=0, drop_classes=None, na_allowed=True, extra_classes_allowed=True, logger_name=None):
+        if drop_classes is None:
+            drop_classes = []
         self._na_allowed = na_allowed
         self._extra_classes_allowed = extra_classes_allowed
         self._lenc = LabelEncoder()
@@ -84,7 +90,7 @@ class MyOneHotEncoder:
         self._min_freq = min_freq
         self._drop_classes = list(drop_classes)
         self._logger_name = logger_name
-    
+
     def fit(self, series):
         if not self._na_allowed and np.sum(series.isnull()) > 0:
             raise ValueError('NA values not allowed')
@@ -93,7 +99,7 @@ class MyOneHotEncoder:
             labeled = self._lenc.fit_transform(series_to_fit.fillna('---').astype('str'))
         else:
             labeled = self._lenc.fit_transform(series.astype('str'))
-        
+
         self._oenc.fit(labeled.reshape(-1, 1))
         if self._min_freq > 0:
             drop_classes = [k for k, v in Counter(labeled).items() if v < self._min_freq]
@@ -105,7 +111,7 @@ class MyOneHotEncoder:
                                                        key=lambda x: x[1])]
         if '---' in self._drop_classes:
             self._drop_classes.remove('---')
-        
+
     def transform(self, series, name_prefix=True):
         try:
             if not self._na_allowed and np.sum(series.isnull()) > 0:
@@ -117,9 +123,9 @@ class MyOneHotEncoder:
             series_to_transform[series_to_transform.isin(extra_classes)] = '---'
             if self._logger_name is not None:
                 logging.getLogger(self._logger_name).warning('transforming {}: dropped {}'
-                                                             .format(series.name,str(sorted(extra_classes))))
+                                                             .format(series.name, str(sorted(extra_classes))))
             transformed = pd.DataFrame(self._oenc.transform(self._lenc.transform(series_to_transform).reshape(-1, 1)),
-                                columns=self._lenc.classes_, index=series.index, dtype=bool)
+                                       columns=self._lenc.classes_, index=series.index, dtype=bool)
             if self._na_allowed or self._extra_classes_allowed:
                 transformed = transformed.drop('---', 1)
             if len(self._drop_classes) > 0:
@@ -129,10 +135,11 @@ class MyOneHotEncoder:
             return transformed
         except:
             raise ValueError('{}, {}, {}'.format(series.name, self._lenc.classes_, len(self._oenc.active_features_)))
-    
+
     def fit_transform(self, series, name_prefix=True):
         self.fit(series)
         return self.transform(series, name_prefix)
+
 
 class TextVectorizer:
     def __init__(self, min_ngram, max_ngram, vocabulary=None, count=False, lowercase=False):
@@ -141,7 +148,7 @@ class TextVectorizer:
         self.vocabulary = vocabulary
         self.count = count
         self.vectorizer = CountVectorizer(ngram_range=(min_ngram, max_ngram), lowercase=lowercase,
-                                          vocabulary=vocabulary, token_pattern = r'(?u)\b\w+\b')
+                                          vocabulary=vocabulary, token_pattern=r'(?u)\b\w+\b')
 
     def fit(self, text_col):
         self.vectorizer.fit(text_col.fillna(''))
@@ -157,6 +164,7 @@ class TextVectorizer:
     def fit_transform(self, text_col):
         self.fit(text_col)
         return self.transform(text_col)
+
 
 class Tokenizer:
     def __init__(self):
@@ -174,10 +182,10 @@ class Tokenizer:
         self.token_filter = lambda x: x[3] is not None
         self.concat_no_s = True
         self.replace_fio_and_geo = True
-        self.fio_and_geo_parts = {'имя' : 'имяимя',
-                                  'фам' : 'фамфам',
-                                  'отч' : 'отчотч',
-                                  'гео' : 'геогео'}
+        self.fio_and_geo_parts = {'имя': 'имяимя',
+                                  'фам': 'фамфам',
+                                  'отч': 'отчотч',
+                                  'гео': 'геогео'}
 
     def get_token(self, item):
         if 'analysis' in item.keys() and len(item['analysis']) > 0:
@@ -213,19 +221,19 @@ class Tokenizer:
                         yield from [new_token, token]
                 else:
                     yield token
-    
+
     def fit(self, text):
         if text is None or str(text) == 'nan' or not isinstance(text, str):
             return []
         sentences = []
         sentence = []
-        
+
         def add_to_sentence(token, sentence):
             sentence += [(token[0], self.ILLEGAL_CHARACTERS_RE.sub("", token[1]).strip().lower(),
                           False, token[3].split('=')[0].split(',')[0] if token[3] is not None else None)]
             if self.concat_no_s and len(sentence[-2:-1]) > 0 and "не" in sentence[-2:-1][0]:
                 sentence[-2:] = [reduce(lambda x, y: (x[0] + y[0], x[1] + y[1], True, y[3]), sentence[-2:])]
-                
+
         def flush_english_to_sentence(english_collector, sentence, leave_hyphen_in_place=False):
             word = ''.join(english_collector)
             if not leave_hyphen_in_place:
@@ -233,7 +241,7 @@ class Tokenizer:
             english_collector[:] = []
             if len(word) > 1:
                 sentence += [(word, word, False, 'ENG')]
-        
+
         english_collector = []
         for token in self.tokenize(text):
             if english_collector:
@@ -251,15 +259,15 @@ class Tokenizer:
                 continue
 
             if self.replace_fio_and_geo and token[3] is not None:
-                fio_and_geo_replacements = {k : v for k, v in self.fio_and_geo_parts.items()
+                fio_and_geo_replacements = {k: v for k, v in self.fio_and_geo_parts.items()
                                             if k in token[3]}
                 if len(fio_and_geo_replacements) > 0:
                     token = (list(fio_and_geo_replacements.values())[0], token[1], token[2], token[3])
-            
+
             if token[0] in self.whitelist or (token[0] not in self.stopwords and self.token_filter(token)):
                 add_to_sentence(token, sentence)
                 continue
-            
+
             if self.sentence_divider.match(token[0]):
                 if len(sentence) > 0:
                     sentences.append(sentence)
@@ -287,6 +295,7 @@ class Tokenizer:
 ]
 '''
 
+
 class TopFreqClassTokensFeaturesCalculator:
     """Class for tokens vectorizer, based on tokens frequencies in classes
     
@@ -300,7 +309,7 @@ class TopFreqClassTokensFeaturesCalculator:
     logger_name : str, optional (default=None)
     
     """
-    
+
     def __init__(self, logger_name=None):
         self.vectorizer = None
         self._logger_name = logger_name
@@ -323,8 +332,8 @@ class TopFreqClassTokensFeaturesCalculator:
                 Dict with classes labels as keys
                 and collections.Counter() object for tokens as values.
         """
-        
-        counters = {cl : Counter() for cl in classes_sizes.keys()}
+
+        counters = {cl: Counter() for cl in classes_sizes.keys()}
         for cl, counter in counters.items():
             for tokens_list in tokens_lists[target == cl]:
                 counter.update(Counter(set(tokens_list) if appear else tokens_list))
@@ -357,7 +366,7 @@ class TopFreqClassTokensFeaturesCalculator:
         -------
             result_dict : list of tokens
         """
-        
+
         result_dict = set()
         for cl, counter in counters.items():
             for token, freq in counter.most_common(cl_tokens_number):
@@ -373,7 +382,7 @@ class TopFreqClassTokensFeaturesCalculator:
                 for token, freq in counter.items():
                     if freq / classes_sizes[cl] > top_freq_tokens[token] and freq >= min_cl_token_freq:
                         top_freq_tokens[token] = freq / classes_sizes[cl]
-            
+
             for token, freq in top_freq_tokens.most_common(all_tokens_number):
                 if token not in result_dict and to_add > 0:
                     result_dict.add(token)
@@ -381,7 +390,7 @@ class TopFreqClassTokensFeaturesCalculator:
         else:
             if self._logger_name is not None:
                 logging.getLogger(self._logger_name).info('building tokens dict: no more needed')
-        
+
         result_dict = sorted(result_dict)
         return result_dict
 
@@ -455,9 +464,9 @@ class TopFreqClassTokensFeaturesCalculator:
                 (False if text is always already lowercase or case is important)
         """
         classes = set(target)
-        classes_sizes = {cl : np.sum(target == cl) for cl in classes}
-        #other_classes = {cl : target[target != cl].unique() for cl in classes_sizes.keys()}
-        
+        classes_sizes = {cl: np.sum(target == cl) for cl in classes}
+        # other_classes = {cl : target[target != cl].unique() for cl in classes_sizes.keys()}
+
         self.vectorizer = self._build_vectorizer(tokens_lists, target, cl_tokens_number, all_tokens_number,
                                                  min_cl_token_freq, classes_sizes, appear, count, lowercase)
         self.vectorizer.fit(tokens_lists.map(lambda x: ' '.join(x)))
@@ -476,7 +485,7 @@ class TopFreqClassTokensFeaturesCalculator:
                 Feature values
         """
         return self.vectorizer.transform(text_col)
-    
+
     def fit_transform(self, tokens_lists, target, cl_tokens_number, all_tokens_number, min_cl_token_freq,
                       appear=True, count=True, lowercase=False):
         """Function that collect tokens dict and fits vectorizer
@@ -510,6 +519,7 @@ class TopFreqClassTokensFeaturesCalculator:
                  count, lowercase)
         return self.transform(tokens_lists.map(lambda x: ' '.join(x)))
 
+
 class ClassUniqueTokensFeaturesCalculator:
     """Class for tokens vectorizer, based on tokens frequencies in classes
     
@@ -526,7 +536,7 @@ class ClassUniqueTokensFeaturesCalculator:
     logger_name : str, optional (default=None)
     
     """
-    
+
     def __init__(self, logger_name=None):
         self.vectorizer = None
         self._logger_name = logger_name
@@ -549,8 +559,8 @@ class ClassUniqueTokensFeaturesCalculator:
                 Dict with classes labels as keys
                 and collections.Counter() object for tokens as values.
         """
-        
-        counters = {cl : Counter() for cl in classes_sizes.keys()}
+
+        counters = {cl: Counter() for cl in classes_sizes.keys()}
         for cl, counter in counters.items():
             for tokens_list in tokens_lists[target == cl]:
                 counter.update(Counter(set(tokens_list) if appear else tokens_list))
@@ -598,20 +608,21 @@ class ClassUniqueTokensFeaturesCalculator:
         -------
             result_dict : list of tokens
         """
-        
-        strongly_unique_tokens = {cl : {} for cl in counters.keys()}
-        unique_metrics = {cl : Counter() for cl in counters.keys()}
-        
-        other_classes = {cl : [x for x in counters.keys() if x != cl] for cl in counters.keys()}
-        
+
+        strongly_unique_tokens = {cl: {} for cl in counters.keys()}
+        unique_metrics = {cl: Counter() for cl in counters.keys()}
+
+        other_classes = {cl: [x for x in counters.keys() if x != cl] for cl in counters.keys()}
+
         for cl, counter in counters.items():
             for token, freq in counter.items():
                 other_cl_sum = sum([counters[other_cl][token] for other_cl in other_classes[cl]])
                 if other_cl_sum == 0:
                     strongly_unique_tokens[cl][token] = freq
                 else:
-                    unique_metrics[cl][token] = (freq / classes_sizes[cl]) * np.log(other_cl_sum / (labeled_data_size - classes_sizes[cl]))
-        
+                    unique_metrics[cl][token] = (freq / classes_sizes[cl]) \
+                                                * np.log(other_cl_sum / (labeled_data_size - classes_sizes[cl]))
+
         unique_tokens_result_dict = set()
         for cl, cl_unique_metrics in unique_metrics.items():
             added = 0
@@ -633,7 +644,7 @@ class ClassUniqueTokensFeaturesCalculator:
                     freq = counters[cl][token]
                     if unique_metric > top_unique_tokens[token] and freq >= min_cl_token_freq:
                         top_unique_tokens[token] = unique_metric
-            
+
             for token, unique_metric in top_unique_tokens.most_common(unique_all_tokens_number):
                 if token not in unique_tokens_result_dict and to_add > 0:
                     unique_tokens_result_dict.add(token)
@@ -641,7 +652,7 @@ class ClassUniqueTokensFeaturesCalculator:
         else:
             if self._logger_name is not None:
                 logging.getLogger(self._logger_name).info('building tokens dict: no more needed')
-        
+
         strongly_unique_tokens_result_dict = set()
         for cl, counter in strongly_unique_tokens.items():
             added = 0
@@ -661,7 +672,7 @@ class ClassUniqueTokensFeaturesCalculator:
                 for token, freq in counter.items():
                     if freq / classes_sizes[cl] > top_strongly_unique_tokens[token] and freq >= min_cl_token_freq:
                         top_strongly_unique_tokens[token] = freq / classes_sizes[cl]
-            
+
             for token, freq in top_strongly_unique_tokens.most_common(strongly_unique_all_tokens_number):
                 if token not in strongly_unique_tokens_result_dict and to_add > 0:
                     strongly_unique_tokens_result_dict.add(token)
@@ -669,10 +680,9 @@ class ClassUniqueTokensFeaturesCalculator:
         else:
             if self._logger_name is not None:
                 logging.getLogger(self._logger_name).info('building tokens dict: no more needed')
-        
+
         result_dict = sorted(unique_tokens_result_dict.union(strongly_unique_tokens_result_dict))
         return result_dict
-        
 
     def build_vectorizer(self, tokens_lists, target, unique_cl_tokens_number, unique_all_tokens_number,
                          strongly_unique_cl_tokens_number, strongly_unique_all_tokens_number,
@@ -755,8 +765,8 @@ class ClassUniqueTokensFeaturesCalculator:
                 (False if text is always already lowercase or case is important)
         """
         classes = set(target)
-        classes_sizes = {cl : np.sum(target == cl) for cl in classes}
-        
+        classes_sizes = {cl: np.sum(target == cl) for cl in classes}
+
         self.vectorizer = self.build_vectorizer(tokens_lists, target, unique_cl_tokens_number,
                                                 unique_all_tokens_number, strongly_unique_cl_tokens_number,
                                                 strongly_unique_all_tokens_number, min_cl_token_freq,
@@ -777,7 +787,7 @@ class ClassUniqueTokensFeaturesCalculator:
                 Feature values
         """
         return self.vectorizer.transform(text_col)
-    
+
     def fit_transform(self, tokens_lists, target, unique_cl_tokens_number, unique_all_tokens_number,
                       strongly_unique_cl_tokens_number, strongly_unique_all_tokens_number,
                       min_cl_token_freq, appear=True, count=True, lowercase=False):
