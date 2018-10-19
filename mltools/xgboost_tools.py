@@ -1,11 +1,15 @@
 import json
+import numbers
 import os
 import shutil
 import tempfile
+from datetime import datetime
 from time import time
 
 import numpy as np
+import pandas as pd
 import xgboost as xgb
+from sklearn.model_selection import ShuffleSplit
 from hyperopt import fmin, tpe, hp, STATUS_OK, Trials
 
 
@@ -83,9 +87,9 @@ class XGBoostParamsOptimizer:
         best = fmin(self._xgb_binary_score, space, algo=tpe.suggest, trials=trials, max_evals=max_evals)
         print(best)
 
-    def get_optimal_exact_xgb_params(self, features, target, folds, objectives, score_metric, extra_metrics=None,
-                                     max_depth_min=2, max_depth_max=6, min_eta=0.02, max_eta=0.2, eta_step=0.02,
-                                     min_lambda=1.0, max_lambda=1.0, min_alpha=1.0, max_alpha=1.0,
+    def get_optimal_exact_xgb_params(self, features, target, objectives, score_metric, split=0.3, folds=None,
+                                     extra_metrics=None, max_depth_min=2, max_depth_max=6, min_eta=0.02, max_eta=0.2,
+                                     eta_step=0.02, min_lambda=1.0, max_lambda=1.0, min_alpha=1.0, max_alpha=1.0,
                                      max_evals=50, zero_min_child_weight=True, zero_gamma=True, zero_alpha=True,
                                      default_lambda=True, weigh_positives=False, max_numround=1000,
                                      task_name='xgb_params', tmp_dir=None, remove_tmp_dir=True):
@@ -114,6 +118,15 @@ class XGBoostParamsOptimizer:
             print('{}: no previous results or error'.format(task_name))
 
         self._dm = xgb.DMatrix(features, target)
+
+        if folds is None:
+            if isinstance(split, datetime) or isinstance(split, pd.Timestamp):
+                mask = features.index < split
+                folds = [(np.where(mask)[0], np.where(~mask)[0])]
+            elif isinstance(split, numbers.Number):
+                folds = list(ShuffleSplit(n_splits=1, test_size=split, random_state=0).split(features))
+            else:
+                raise ValueError('unsupported split type')
         self._folds = folds
 
         trials = Trials()
